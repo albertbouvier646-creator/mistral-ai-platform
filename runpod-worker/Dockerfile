@@ -4,7 +4,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PIP_NO_CACHE_DIR=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3 python3-pip git build-essential cmake curl \
+    python3 python3-pip git build-essential cmake ninja-build curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
