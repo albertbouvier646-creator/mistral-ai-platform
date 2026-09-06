@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Qwen 27B Heretic — Chat</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 30px auto; padding: 0 12px; background: #111; color: #eee; }
+  h2 { margin-bottom: 4px; }
+  .sub { color: #888; font-size: 13px; margin-bottom: 16px; }
+  #setup { display: flex; gap: 8px; margin-bottom: 16px; }
+  #setup input { flex: 1; padding: 8px; background: #1b1b1b; border: 1px solid #333; color: #eee; border-radius: 6px; }
+  #log { border: 1px solid #333; border-radius: 8px; padding: 14px; min-height: 360px; max-height: 60vh; overflow-y: auto; white-space: pre-wrap; background: #1b1b1b; }
+  .msg-user { color: #7dc4ff; font-weight: 600; margin-top: 10px; }
+  .msg-ai { color: #eee; margin-top: 4px; }
+  .msg-status { color: #888; font-style: italic; }
+  #row { display: flex; gap: 8px; margin-top: 12px; }
+  #row input { flex: 1; padding: 10px; background: #1b1b1b; border: 1px solid #333; color: #eee; border-radius: 6px; }
+  button { padding: 10px 18px; border: none; border-radius: 6px; background: #2563eb; color: white; cursor: pointer; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<h2>Qwen 27B Heretic — Chat</h2>
+<p class="sub">1er message = ~9 min (réveil du serveur GPU + chargement modèle). Les suivants sont rapides tant que le chat reste actif.</p>
+
+<div id="setup">
+  <input id="apiKey" type="password" placeholder="Ta clé API RunPod (rpa_...)" autocomplete="off">
+  <input id="endpointId" value="hy4153uj5hkaji" placeholder="Endpoint ID">
+</div>
+
+<div id="log"></div>
+<div id="row">
+  <input id="input" placeholder="Écris ton message..." onkeydown="if(event.key==='Enter') send()">
+  <button id="sendBtn" onclick="send()">Envoyer</button>
+</div>
+
+<script>
+const history = [];
+
+function append(cls, text) {
+  const log = document.getElementById('log');
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = text;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+
+async function send() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const endpointId = document.getElementById('endpointId').value.trim();
+  const input = document.getElementById('input');
+  const message = input.value.trim();
+  if (!apiKey || !endpointId || !message) return;
+
+  input.value = '';
+  document.getElementById('sendBtn').disabled = true;
+  append('msg-user', 'Toi: ' + message);
+  history.push({ role: 'user', content: message });
+  const statusLine = append('msg-status', "Envoi... (peut prendre jusqu'à 9 min au premier message)");
+
+  const base = `https://api.runpod.ai/v2/${endpointId}`;
+  const headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
+
+  try {
+    const submit = await fetch(`${base}/run`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        input: { messages: history, max_tokens: 768, temperature: 0.7, stream: false }
+      }),
+    });
+    const job = await submit.json();
+    if (!job.id) throw new Error(JSON.stringify(job));
+
+    const start = Date.now();
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+      const resp = await fetch(`${base}/status/${job.id}`, { headers });
+      const data = await resp.json();
+      const elapsed = Math.round((Date.now() - start) / 1000);
+      statusLine.textContent = `Statut: ${data.status} (${elapsed}s)`;
+
+      if (data.status === 'COMPLETED') {
+        const content = data.output?.[0]?.choices?.[0]?.message?.content || JSON.stringify(data.output);
+        statusLine.remove();
+        append('msg-ai', 'IA: ' + content);
+        history.push({ role: 'assistant', content });
+        break;
+      }
+      if (data.status === 'FAILED' || data.status === 'CANCELLED' || data.status === 'TIMED_OUT') {
+        statusLine.remove();
+        append('msg-status', 'Erreur: ' + JSON.stringify(data));
+        break;
+      }
+    }
+  } catch (e) {
+    statusLine.textContent = 'Erreur: ' + e.message;
+  } finally {
+    document.getElementById('sendBtn').disabled = false;
+  }
+}
+</script>
+</body>
+</html>
