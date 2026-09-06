@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 # Build llama-cpp-python with CUDA (cuBLAS) support so inference runs on GPU
-ENV CMAKE_ARGS="-DGGML_CUDA=on"
+ENV CMAKE_ARGS="-DGGML_CUDA=on -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF"
 ENV FORCE_CMAKE=1
 
 COPY requirements.txt .
