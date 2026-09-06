@@ -9,7 +9,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Build llama-cpp-python with CUDA (cuBLAS) support so inference runs on GPU
+# Build llama-cpp-python with CUDA (cuBLAS) support so inference runs on GPU.
+# CI runners have no GPU/driver, so provide the CUDA driver *stub* lib (ships in
+# the devel image for exactly this cross-compile case) so the linker can
+# resolve libcuda symbols for the llava example binaries.
+RUN ln -sf /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/libcuda.so.1
+ENV LIBRARY_PATH="/usr/local/cuda/lib64/stubs:${LIBRARY_PATH}"
 ENV CMAKE_ARGS="-DGGML_CUDA=on -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_SERVER=OFF"
 ENV FORCE_CMAKE=1
 
