@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Mistral NeMo Chat — Test</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 700px; margin: 40px auto; }
+  #log { border: 1px solid #ccc; border-radius: 8px; padding: 12px; min-height: 300px; white-space: pre-wrap; }
+  .msg-user { color: #0a58ca; font-weight: 600; }
+  .msg-ai { color: #222; }
+  #row { display: flex; gap: 8px; margin-top: 12px; }
+  input { flex: 1; padding: 8px; }
+  button { padding: 8px 16px; }
+</style>
+</head>
+<body>
+<h2>Mistral NeMo — Test rapide</h2>
+<p>Backend: <input id="backendUrl" value="http://localhost:8000" size="30"> | Token Supabase (Bearer): <input id="token" size="30"></p>
+<div id="log"></div>
+<div id="row">
+  <input id="input" placeholder="Écris ton message..." onkeydown="if(event.key==='Enter') send()">
+  <button onclick="send()">Envoyer</button>
+</div>
+
+<script>
+let conversationId = null;
+
+function append(cls, text) {
+  const log = document.getElementById('log');
+  const span = document.createElement('div');
+  span.className = cls;
+  span.textContent = text;
+  log.appendChild(span);
+  log.scrollTop = log.scrollHeight;
+  return span;
+}
+
+async function send() {
+  const input = document.getElementById('input');
+  const message = input.value.trim();
+  if (!message) return;
+  input.value = '';
+  append('msg-user', 'Toi: ' + message);
+
+  const backendUrl = document.getElementById('backendUrl').value;
+  const token = document.getElementById('token').value;
+  const aiLine = append('msg-ai', 'IA: ');
+
+  const resp = await fetch(backendUrl + '/api/chat', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': 'Bearer ' + token,
+    },
+    body: JSON.stringify({ conversation_id: conversationId, message }),
+  });
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+
+    const events = buffer.split('\n\n');
+    buffer = events.pop();
+    for (const evt of events) {
+      const dataLine = evt.split('\n').find(l => l.startsWith('data:'));
+      const eventLine = evt.split('\n').find(l => l.startsWith('event:'));
+      if (!dataLine) continue;
+      const data = dataLine.slice(5).trim();
+      const eventName = eventLine ? eventLine.slice(6).trim() : 'token';
+
+      if (eventName === 'token') aiLine.textContent += data;
+      if (eventName === 'done') conversationId = data;
+      if (eventName === 'sources') append('msg-ai', 'Sources: ' + data);
+    }
+  }
+}
+</script>
+</body>
+</html>
