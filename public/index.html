@@ -21,11 +21,10 @@
 </head>
 <body>
 <h2>Qwen 27B Heretic — Chat</h2>
-<p class="sub">1er message = ~9 min (réveil du serveur GPU + chargement modèle). Les suivants sont rapides tant que le chat reste actif.</p>
+<p class="sub">1er message = jusqu'à ~9 min (réveil du serveur GPU). Les suivants sont rapides tant que le chat reste actif.</p>
 
 <div id="setup">
-  <input id="apiKey" type="password" placeholder="Ta clé API RunPod (rpa_...)" autocomplete="off">
-  <input id="endpointId" value="hy4153uj5hkaji" placeholder="Endpoint ID">
+  <input id="passcode" type="password" placeholder="Code d'accès (si demandé)" autocomplete="off">
 </div>
 
 <div id="log"></div>
@@ -48,11 +47,10 @@ function append(cls, text) {
 }
 
 async function send() {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  const endpointId = document.getElementById('endpointId').value.trim();
+  const passcode = document.getElementById('passcode').value.trim();
   const input = document.getElementById('input');
   const message = input.value.trim();
-  if (!apiKey || !endpointId || !message) return;
+  if (!message) return;
 
   input.value = '';
   document.getElementById('sendBtn').disabled = true;
@@ -60,41 +58,22 @@ async function send() {
   history.push({ role: 'user', content: message });
   const statusLine = append('msg-status', "Envoi... (peut prendre jusqu'à 9 min au premier message)");
 
-  const base = `https://api.runpod.ai/v2/${endpointId}`;
-  const headers = { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' };
-
   try {
-    const submit = await fetch(`${base}/run`, {
+    const resp = await fetch('/api/chat', {
       method: 'POST',
-      headers,
-      body: JSON.stringify({
-        input: { messages: history, max_tokens: 768, temperature: 0.7, stream: false }
-      }),
+      headers: { 'Content-Type': 'application/json', 'X-Passcode': passcode },
+      body: JSON.stringify({ messages: history, max_tokens: 768, temperature: 0.7 }),
     });
-    const job = await submit.json();
-    if (!job.id) throw new Error(JSON.stringify(job));
+    const data = await resp.json();
+    statusLine.remove();
 
-    const start = Date.now();
-    while (true) {
-      await new Promise(r => setTimeout(r, 3000));
-      const resp = await fetch(`${base}/status/${job.id}`, { headers });
-      const data = await resp.json();
-      const elapsed = Math.round((Date.now() - start) / 1000);
-      statusLine.textContent = `Statut: ${data.status} (${elapsed}s)`;
-
-      if (data.status === 'COMPLETED') {
-        const content = data.output?.[0]?.choices?.[0]?.message?.content || JSON.stringify(data.output);
-        statusLine.remove();
-        append('msg-ai', 'IA: ' + content);
-        history.push({ role: 'assistant', content });
-        break;
-      }
-      if (data.status === 'FAILED' || data.status === 'CANCELLED' || data.status === 'TIMED_OUT') {
-        statusLine.remove();
-        append('msg-status', 'Erreur: ' + JSON.stringify(data));
-        break;
-      }
+    if (!resp.ok) {
+      append('msg-status', 'Erreur: ' + (data.detail || resp.status));
+      return;
     }
+
+    append('msg-ai', 'IA: ' + data.reply);
+    history.push({ role: 'assistant', content: data.reply });
   } catch (e) {
     statusLine.textContent = 'Erreur: ' + e.message;
   } finally {
