@@ -74,6 +74,11 @@ async function send() {
 
     append('msg-ai', 'IA: ' + data.reply);
     history.push({ role: 'assistant', content: data.reply });
+
+    if (data.sources && data.sources.length) {
+      const list = data.sources.map((s, i) => `[${i + 1}] ${s.title} - ${s.url}`).join('\n');
+      append('msg-status', 'Sources:\n' + list);
+    }
   } catch (e) {
     statusLine.textContent = 'Erreur: ' + e.message;
   } finally {
